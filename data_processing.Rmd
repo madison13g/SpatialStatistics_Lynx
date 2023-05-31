@@ -1,0 +1,78 @@
+---
+title: "data_processsing"
+date: "2023-04-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import the Dataset
+
+```{r}
+# install.packages(c("rgbif", "plyr"))
+library(rgbif)
+# For single species
+lck <- occ_search(scientificName = "Lynx canadensis Kerr, 1792", limit = 10164)
+```
+
+
+```{r}
+lc.data <- lck$data
+# Export data as csv file
+write.csv(lc.data, "datasets/raw/lc_raw.csv", row.names = FALSE)
+```
+
+```{r}
+lc.data <- read.csv("datasets/raw/lc_raw.csv")
+```
+
+```{r}
+colnames(lc.data)
+```
+
+```{r}
+# percentage of missing values in each column in training dataset
+p <- function(x) {sum(is.na(x))/length(x)*100}
+sort(apply(lc.data, 2, p)) # marmin = 2 means function will be applied in each column 
+```
+
+```{r}
+# Provinces
+unique(lc$stateProvince)
+```
+
+
+```{r}
+lc <- lc.data[, c('countryCode', 'stateProvince', 'higherClassification', 'month', 'locality', 'higherGeography', 'sex', 'decimalLatitude', 'decimalLongitude', 'dateIdentified', 'coordinateUncertaintyInMeters', 'footprintWKT', 'country')]
+
+lc <- lc[lc$stateProvince == 'British Columbia' & !is.na(lc$stateProvince) & !is.na(lc$decimalLatitude) & !is.na(lc$decimalLongitude),]
+```
+
+
+```{r}
+# Load required libraries
+library(sp)
+library(rgdal)
+
+# Create a SpatialPointsDataFrame object using the lc df
+lc_sp <- SpatialPointsDataFrame(coords = lc[, c("decimalLongitude", "decimalLatitude")],
+                                       data = lc)
+
+# Assign the WGS84 CRS (EPSG:4326) to the lc_sp object
+proj4string(lc_sp) <- CRS("+proj=longlat +datum=WGS84")
+
+# Transform the coordinates to match the CRS of the BC_win object
+bc_crs <- "+proj=aea +lat_0=45 +lon_0=-126 +lat_1=50 +lat_2=58.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs"
+lc_transformed <- spTransform(lc_sp, CRS(bc_crs))
+
+# extract the transformed coordinates and assign them to lc df
+lc$decimalLongitude <- lc_transformed@coords[, 1]
+lc$decimalLatitude <- lc_transformed@coords[, 2]
+```
+
+
+```{r}
+write.csv(lc, "datasets/processed/lc.csv", row.names = FALSE)
+```
